@@ -6,54 +6,71 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Test route
+// ================= ROOT =================
 app.get("/", (req, res) => {
   res.send("BoomFi backend running");
 });
 
-// Health check
+// ================= HEALTH CHECK =================
 app.get("/health", (req, res) => {
-  res.send("OK");
+  res.status(200).send("OK");
 });
 
-// Create payment (FIXED)
+// ================= CREATE PAYMENT =================
 app.post("/create-payment", async (req, res) => {
   try {
 
-    // ⚠️ IMPORTANT:
-    // BoomFi link is STATIC (cannot add amount or modify it)
-    const paymentUrl = "https://pay.boomfi.xyz/Pr1l6WoErz";
+    const items = req.body.items || [];
 
+    // Calculate cart total
+    const total = items.reduce(
+      (sum, item) => sum + item.price * item.qty,
+      0
+    );
+
+    const paylinkId = "Pr1l6WoErz";
+
+    // ================= BOOMFI API CALL =================
+    const response = await fetch(
+      `https://mapi.boomfi.xyz/v1/paylinks/generate-variant/${paylinkId}`,
+      {
+        method: "POST",
+        headers: {
+          "X-API-KEY": process.env.BOOMFI_API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          price: total,
+          currency: "USD"
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    // Safety check
+    if (!data || !data.url) {
+      return res.status(500).json({
+        error: "Failed to generate payment link",
+        details: data
+      });
+    }
+
+    // Return payment URL to frontend
     return res.json({
-      paymentUrl
-    });
-
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      error: "Payment creation failed"
-    });
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running on port", PORT);
-});    return res.json({
-      paymentUrl
+      paymentUrl: data.url
     });
 
   } catch (err) {
     console.error("Payment error:", err);
 
     return res.status(500).json({
-      error: "Payment creation failed"
+      error: "Server error while creating payment"
     });
   }
 });
 
-// 🚀 Start server (IMPORTANT for SnapDeploy)
+// ================= START SERVER =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
